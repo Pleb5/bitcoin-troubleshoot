@@ -5,79 +5,83 @@
 
 import { build, files, version } from '$service-worker';
 
-const sw = self as unknown as ServiceWorkerGlobalScope;
+import NDK from "@nostr-dev-kit/ndk";
+import {
+    NDKSubscription,
+    type NDKSubscriptionOptions,
+    type NDKFilter,
+    NDKSubscriptionCacheUsage
+} from '@nostr-dev-kit/ndk';
 
-// Create a unique cache name for this deployment
-const CACHE = `cache-${version}`;
+const sw = self as unknown as ServiceWorkerGlobalScope;
 
 const ASSETS = [
     ...build, // the app itself	
     ...files  // everything in `static`
 ];
 
-// -------- Code from SvelteKit example for caching requests. Not relevant to nostr ------
+console.log(sw)
 
-// self.addEventListener('install', (event) => {
-//     // Create a new cache and add all files to it
-//     async function addFilesToCache() {
-//         const cache = await caches.open(CACHE);
-//         await cache.addAll(ASSETS);
-//     }
-//
-//     event.waitUntil(addFilesToCache());
-// });
-//
-// self.addEventListener('activate', (event) => {
-//     // Remove previous cached data from disk
-//     async function deleteOldCaches() {
-//         for (const key of await caches.keys()) {
-//             if (key !== CACHE) await caches.delete(key);
-//         }   
-//     }
-//
-//     event.waitUntil(deleteOldCaches());
-// });
-//
-// self.addEventListener('fetch', (event) => {
-//     // ignore POST requests etcroperty
-//     if (event.request.method !== 'GET') return;
-//
-//     async function respond() {
-//         const url = new URL(event.request.url);
-//         const cache = await caches.open(CACHE);
-//         // `build`/`files` can always be served from the cache
-//         if (ASSETS.includes(url.pathname)) {
-//             const response = await cache.match(url.pathname);
-//             if (response) {
-//                 return response;
-//             }
-//         }
-//
-//         // for everything else, try the network first, but
-//         // fall back to the cache if we're offline
-//         try {
-//             const response = await fetch(event.request);
-//             // if we're offline, fetch can return a value that is not a Response
-//             // instead of throwing - and we can't pass this non-Response to respondWith
-//             if (!(response instanceof Response)) {
-//                 throw new Error('invalid response from fetch');
-//             }
-//             if (response.status === 200) {
-//                 cache.put(event.request, response.clone());
-//             }
-//
-//             return response;
-//         } catch (err) {
-//             const response = await cache.match(event.request);
-//             if (response) {
-//                 return response;
-//             }
-//             // if there's no cache, then just error out
-//             // as there is nothing we can do to respond to this request
-//             throw err;
-//         }
-//     }
-//     event.respondWith(respond());
-// });
+let fetcherNDK: NDK;
+const ndkSubOptions: NDKSubscriptionOptions = {
+    cacheUsage: NDKSubscriptionCacheUsage.CACHE_FIRST,
+    closeOnEose: true
+};
+// let ndkSubscription: NDKSubscription;
 
+let intervalID: NodeJS.Timeout;
 
+sw.onactivate = async() => {
+    console.log('Service Worker activated')
+    const clients = await sw.clients.matchAll();
+    clients.forEach((client: Client) => {
+        // client.postMessage('a');
+    });
+}
+
+sw.onmessage = async(m) => {
+    console.log('message received in service worker', m)
+    const filters: NDKFilter[] | undefined = m.data['filters'];
+    const relays: string[] | undefined = m.data['relays'];
+    if (filters && relays && filters.length > 0 && relays.length > 0) {
+        console.log('filters in message', filters)
+        console.log('relays in message', relays)
+
+        fetcherNDK = new NDK({
+            explicitRelayUrls: relays,
+        });
+
+        await fetcherNDK.connect();
+
+        console.log('ndk in service worker connected')
+
+        if(!intervalID) {
+            intervalID = setInterval(fetchTicketsAndOffers, 5000, filters);
+        } else {
+            clearInterval(intervalID);
+            console.log('restarting fetcher...')
+            intervalID = setInterval(fetchTicketsAndOffers, 5000, filters);
+        }
+        
+    } else if(m.data == 'stop') {
+        clearInterval(intervalID);
+    } else {
+        console.log('Unexpected message in Service Worker: ', m);
+    }
+};
+
+sw.onmessageerror = (me) => {
+    console.log('Message error:', me);
+};
+
+sw.onerror = (e) => {
+    console.log("Error happened in Service Worker:", e.message)
+};
+
+async function fetchTicketsAndOffers(filters: NDKFilter[]) {
+    console.log('fetching events with filter: ', filters)
+    if (fetcherNDK) {
+        const events = await fetcherNDK.fetchEvents(filters, ndkSubOptions);
+        console.log('fetchEvents resolved:', events)
+    }
+}

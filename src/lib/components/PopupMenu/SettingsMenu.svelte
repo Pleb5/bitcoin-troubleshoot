@@ -8,7 +8,9 @@
 
     import {DEFAULTRELAYURLS, blacklistedRelays, storedPool, sessionPK } from "$lib/stores/ndk";
 
-    import { myTicketFilter, myOfferFilter, myTickets, myOffers, ticketsOfSpecificOffers,
+    import { 
+        ticketFetchFilter, offerFetchFilter,
+        myTicketFilter, myOfferFilter, myTickets, myOffers, ticketsOfSpecificOffers,
         ticketsOfSpecificOffersFilter, offersOnTicketsFilter, offersOnTickets 
     } from '$lib/stores/troubleshoot-eventstores';
 
@@ -52,6 +54,15 @@
 
                 $sessionPK = '';
                 sessionStorage.clear();
+
+                if ('serviceWorker' in navigator) {
+                    console.log('stopping fetcher...')
+                    // Empty fetcher filters and stop fetching
+                    ticketFetchFilter['#d'] = [];
+                    offerFetchFilter['#a'] = [];
+
+                    navigator.serviceWorker.postMessage('stop');
+                }
 
                 $loggedIn = false;
 

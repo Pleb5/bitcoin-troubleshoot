@@ -55,6 +55,19 @@ export const myOfferFilter: NDKFilter<BTCTroubleshootKind> = {
     authors: [], 
     limit:1000
 };
+
+// Filters for Service Worker background event fetcher
+export const ticketFetchFilter: NDKFilter<BTCTroubleshootKind> = {
+    kinds: [BTCTroubleshootKind.Ticket],
+    '#d': [],
+};
+
+export const offerFetchFilter: NDKFilter<BTCTroubleshootKind> = {
+    kinds: [BTCTroubleshootKind.Offer],
+    '#a': []
+};
+
+
 export const newTickets:NDKEventStore<ExtendedBaseType<TicketEvent>>
         = get(ndk).storeSubscribe<TicketEvent>(newTicketsFilter, subOptions, TicketEvent);
 

@@ -1,5 +1,6 @@
 <script lang="ts">
     import "../app.css";
+    import { dev } from '$app/environment';
 
     // Font awesome
     import '@fortawesome/fontawesome-free/css/fontawesome.css';
@@ -15,7 +16,11 @@
     import { loggedIn } from "$lib/stores/login";
     import currentUser from "$lib/stores/login";
 
+    import { TicketEvent } from "$lib/events/TicketEvent";
+    import { OfferEvent } from "$lib/events/OfferEvent";
+
     import { 
+        ticketFetchFilter, offerFetchFilter,
         newTickets, oldTickets, myTickets,
         myOffers, offersOnTickets, ticketsOfSpecificOffers 
     } from "$lib/stores/troubleshoot-eventstores";
@@ -62,8 +67,6 @@
     import { onDestroy, onMount } from "svelte";
     import { goto } from "$app/navigation";
 
-    // Tickets and Offers
-
     initializeStores();
 
     // Skeleton popup init
@@ -78,8 +81,11 @@
     onMount(async () => {
 
 // ---------------------------- Basic Init ----------------------------
+        // For navigator in reactive block
+        mounted = true;
 
         localStorage.debug = 'ndk:*'
+
         if(!$modeCurrent) {
             localStorage.setItem('modeCurrent', 'false');
             $modeCurrent = false;
@@ -350,6 +356,63 @@
         toastId = toastStore.trigger(t);
     }
 
+    function updateFetcherParams() {
+        if ('serviceWorker' in navigator) {
+            // A Service Worker has taken control over this client
+            if(navigator.serviceWorker.controller) {
+                // Check if the offers on this ticket or the ticket of this offer
+                // is already tracked by related filters. If not, start tracking and 
+                // modify Service Worker fetcher
+
+                // This could be more effective by tracking these filters using local storage 
+                // because then the whole 'restart fetching with modified params' 
+                // operation is only called after a brand new login
+                $myTickets.forEach((ticket: TicketEvent) => {
+                    if (!offerFetchFilter['#a']?.includes(ticket.ticketAddress)) {
+                        offerFetchFilter['#a']?.push(ticket.ticketAddress);
+                    }
+                });
+
+                $myOffers.forEach((offer: OfferEvent) => {
+                    const dTag = offer.referencedTicketAddress.split(':')[2] as string;
+
+                    if (!ticketFetchFilter['#d']?.includes(dTag)) {
+                        ticketFetchFilter['#d']?.push(dTag);       
+                    } 
+                });
+
+                navigator.serviceWorker.controller.postMessage({
+                    filters: [ticketFetchFilter, offerFetchFilter],
+                    relays: $ndk.explicitRelayUrls
+                });
+                console.log('fetch params changed:', ticketFetchFilter, offerFetchFilter)
+            } else {
+                console.log('no serviceWorker in control, wait for it...!')
+
+                navigator.serviceWorker.oncontrollerchange = (event: Event) => {
+                    console.log('service worker ready, update fetcher params...')
+                    updateFetcherParams();
+                };
+                navigator.serviceWorker.register(
+                    '/service-worker.js',
+                    {	type: dev ? 'module' : 'classic'}
+                );
+
+                // navigator.serviceWorker.onmessage = updateFetcherParams;
+            }
+        } else {
+            // this would log too often in unsupported /very old/ browsers
+            // console.log('service worker not supported')
+        }
+    }
+
+    // Update fetcher params
+    let mounted = false;
+    $: if ( (myTickets || myOffers) && mounted) {
+        updateFetcherParams();
+    }
+
+    
 </script>
 
 <Toast />

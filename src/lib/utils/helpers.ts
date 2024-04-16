@@ -1,4 +1,5 @@
-import type { NDK, NDKUser, NDKSigner } from '@nostr-dev-kit/ndk';
+import type { NDK, NDKSigner } from '@nostr-dev-kit/ndk';
+
 import { loggedIn } from '../stores/login';
 import currentUser from '../stores/login';
 
@@ -22,3 +23,4 @@ export async function initializeUser(ndk: NDK) {
     await user.fetchProfile();
     currentUser.set(user);
 }
+
