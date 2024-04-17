@@ -393,12 +393,6 @@
                     console.log('service worker ready, update fetcher params...')
                     updateFetcherParams();
                 };
-                navigator.serviceWorker.register(
-                    '/service-worker.js',
-                    {	type: dev ? 'module' : 'classic'}
-                );
-
-                // navigator.serviceWorker.onmessage = updateFetcherParams;
             }
         } else {
             // this would log too often in unsupported /very old/ browsers

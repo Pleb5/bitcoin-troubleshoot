@@ -31,11 +31,17 @@ const ndkSubOptions: NDKSubscriptionOptions = {
 
 let intervalID: NodeJS.Timeout;
 
-sw.onactivate = async() => {
+sw.oninstall = () => {
+    sw.skipWaiting();
+}
+
+sw.onactivate = async(event: ExtendableEvent) => {
+    event.waitUntil(sw.clients.claim());
     console.log('Service Worker activated')
+
     const clients = await sw.clients.matchAll();
     clients.forEach((client: Client) => {
-        // client.postMessage('a');
+        // client.postMssage('a');
     });
 }
 
