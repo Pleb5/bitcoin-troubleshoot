@@ -402,10 +402,10 @@
 
     // Update fetcher params
     let mounted = false;
-    $: if ( (myTickets || myOffers) && mounted) {
+    $: if ( ($myTickets || $myOffers) && mounted && $currentUser) {
+        console.log('myTickets or myOffers changed, update fetcher params...')
         updateFetcherParams();
-    }
-
+    } 
     
 </script>
 
