@@ -5,6 +5,9 @@
     import { getModalStore } from '@skeletonlabs/skeleton';
     import type { ModalSettings, ModalComponent } from '@skeletonlabs/skeleton';
     import FeedbackModal from '../Modals/FeedbackModal.svelte';
+    import { SlideToggle } from '@skeletonlabs/skeleton';
+    import notificationsEnabled from '$lib/stores/notifications';
+    import { getActiveServiceWorker } from '$lib/utils/helpers';
 
     import {DEFAULTRELAYURLS, blacklistedRelays, storedPool, sessionPK } from "$lib/stores/ndk";
 
@@ -55,13 +58,13 @@
                 $sessionPK = '';
                 sessionStorage.clear();
 
-                if ('serviceWorker' in navigator) {
-                    console.log('stopping fetcher...')
-                    // Empty fetcher filters and stop fetching
-                    ticketFetchFilter['#d'] = [];
-                    offerFetchFilter['#a'] = [];
-
-                    navigator.serviceWorker.postMessage('stop');
+                console.log('stopping fetcher...')
+                // Empty fetcher filters and stop fetching
+                ticketFetchFilter['#d'] = [];
+                offerFetchFilter['#a'] = [];
+                const activeSW = await getActiveServiceWorker();
+                if (activeSW) {
+                    activeSW.postMessage('stop');
                 }
 
                 $loggedIn = false;
@@ -153,6 +156,15 @@
                         <span class="w-6 text-center"><i class="fa-solid fa-globe" /></span>
                         <span>Network</span>
                     </a>
+                </li>
+                <li>
+                    <SlideToggle name='enable-notifications'
+                        active="bg-primary-500"
+                        size='sm'
+                        bind:checked={$notificationsEnabled}
+                    >
+                        Notifications
+                    </SlideToggle>
                 </li>
                 <hr class="!my-4" />
                 <li>

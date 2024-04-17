@@ -16,6 +16,8 @@
     import { loggedIn } from "$lib/stores/login";
     import currentUser from "$lib/stores/login";
 
+    import notificationsEnabled from '$lib/stores/notifications';
+
     import { TicketEvent } from "$lib/events/TicketEvent";
     import { OfferEvent } from "$lib/events/OfferEvent";
 
@@ -25,7 +27,7 @@
         myOffers, offersOnTickets, ticketsOfSpecificOffers 
     } from "$lib/stores/troubleshoot-eventstores";
 
-    import { initializeUser } from '$lib/utils/helpers';
+    import { initializeUser, getActiveServiceWorker } from '$lib/utils/helpers';
     
     import { messageStore } from "$lib/stores/messages";
 
@@ -356,56 +358,78 @@
         toastId = toastStore.trigger(t);
     }
 
-    function updateFetcherParams() {
-        if ('serviceWorker' in navigator) {
-            // A Service Worker has taken control over this client
-            if(navigator.serviceWorker.controller) {
-                // Check if the offers on this ticket or the ticket of this offer
-                // is already tracked by related filters. If not, start tracking and 
-                // modify Service Worker fetcher
 
-                // This could be more effective by tracking these filters using local storage 
-                // because then the whole 'restart fetching with modified params' 
-                // operation is only called after a brand new login
-                $myTickets.forEach((ticket: TicketEvent) => {
-                    if (!offerFetchFilter['#a']?.includes(ticket.ticketAddress)) {
-                        offerFetchFilter['#a']?.push(ticket.ticketAddress);
-                    }
-                });
+    async function updateNotificationParams() {
+        const activeSW = await getActiveServiceWorker();
+        if (!activeSW) return;
 
-                $myOffers.forEach((offer: OfferEvent) => {
-                    const dTag = offer.referencedTicketAddress.split(':')[2] as string;
-
-                    if (!ticketFetchFilter['#d']?.includes(dTag)) {
-                        ticketFetchFilter['#d']?.push(dTag);       
-                    } 
-                });
-
-                navigator.serviceWorker.controller.postMessage({
-                    filters: [ticketFetchFilter, offerFetchFilter],
-                    relays: $ndk.explicitRelayUrls
-                });
-                console.log('fetch params changed:', ticketFetchFilter, offerFetchFilter)
-            } else {
-                console.log('no serviceWorker in control, wait for it...!')
-
-                navigator.serviceWorker.oncontrollerchange = (event: Event) => {
-                    console.log('service worker ready, update fetcher params...')
-                    updateFetcherParams();
+        // If there is no permission for notifications yet, ask for it
+        // If it is denied then return and turn notifications off
+        if(Notification.permission !== 'granted') {
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                notificationsEnabled.set(false);
+                const t: ToastSettings = {
+                    message:`
+                        <p>You denied permission for Notifications!</p>
+                        <p>
+                            <span>Click small icon </span>
+                            <span><i class="fa-solid fa-circle-info"></i></span>
+                            <span> left of browser search bar to re-enable it!</span>
+                        </p>
+                    `,
+                    autohide: false,
                 };
+                toastStore.trigger(t);
+                console.log('user did not grant permission for notifications')
+                return;
             }
-        } else {
-            // this would log too often in unsupported /very old/ browsers
-            // console.log('service worker not supported')
+            notificationsEnabled.set(true);
         }
+        // Check if the offers on this ticket or the ticket of this offer
+        // is already tracked by related filters. If not, start tracking and 
+        // modify Service Worker fetcher
+
+        // This could be more effective by tracking these filters using local storage 
+        // because then the whole 'restart fetching with modified params' 
+        // operation is only called after a brand new login
+        $myTickets.forEach((ticket: TicketEvent) => {
+            if (!offerFetchFilter['#a']?.includes(ticket.ticketAddress)) {
+                offerFetchFilter['#a']?.push(ticket.ticketAddress);
+            }
+        });
+
+        $myOffers.forEach((offer: OfferEvent) => {
+            const dTag = offer.referencedTicketAddress.split(':')[2] as string;
+
+            if (!ticketFetchFilter['#d']?.includes(dTag)) {
+                ticketFetchFilter['#d']?.push(dTag);       
+            } 
+        });
+
+        activeSW.postMessage({
+            filters: [ticketFetchFilter, offerFetchFilter],
+            relays: $storedPool
+        });
+        console.log('fetch params changed:', ticketFetchFilter, offerFetchFilter)
     }
 
-    // Update fetcher params
+    // Update notification params
     let mounted = false;
-    $: if ( ($myTickets || $myOffers) && mounted && $currentUser) {
+    $: if ($notificationsEnabled && ($myTickets || $myOffers) && mounted && $currentUser) {
         console.log('myTickets or myOffers changed, update fetcher params...')
-        updateFetcherParams();
+        updateNotificationParams();
     } 
+    // Stop notifications
+    $: if(mounted && !$notificationsEnabled) {
+        // Set in localStorage as well
+        notificationsEnabled.set(false);
+        getActiveServiceWorker().then((activeSW: ServiceWorker|null) => {
+            if (activeSW) {
+                activeSW.postMessage('stop');
+            }
+        });
+    }
     
 </script>
 
